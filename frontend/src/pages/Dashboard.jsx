@@ -36,10 +36,7 @@ export default function Dashboard() {
             
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 tracking-tight animate-fade-in-up">
               Professional Product
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-accent-400 to-primary-500 animate-shimmer" style={{
-                backgroundSize: '200% 100%',
-                backgroundImage: 'linear-gradient(90deg, rgb(54, 165, 250) 0%, rgb(52, 211, 153) 50%, rgb(54, 165, 250) 100%)'
-              }}>
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-accent-400 to-primary-500">
                 Image Evaluation
               </span>
             </h1>
