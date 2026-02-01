@@ -20,6 +20,8 @@ A full-stack application for analyzing product images with comprehensive AI-powe
 
 ### User Experience
 - **Modern UI**: Beautiful gradient-based design with card layouts
+- **🆕 Animated Backgrounds**: Smooth floating gradient orbs creating an engaging, dynamic visual experience
+- **🆕 Enhanced Interactions**: Advanced hover effects, micro-animations, and smooth transitions throughout
 - **Image Preview**: See your image before upload
 - **Real-time Results**: Instant analysis with detailed quality checklist
 - **Improvement Suggestions**: Actionable tips to enhance image quality
@@ -313,6 +315,20 @@ const API = axios.create({
 });
 ```
 
+## 🎨 Visual Design Features
+
+### Dynamic Animated Backgrounds
+The application features smooth, floating gradient orbs that create an engaging and modern visual experience without compromising performance. These animations are implemented using CSS keyframes and are GPU-accelerated for optimal performance.
+
+### Advanced Interactions
+- **Button Hover Effects**: Shimmer animations and smooth scale transitions
+- **Card Animations**: Gradient overlays, lift effects, and rotation on hover
+- **Micro-interactions**: Icon animations, blur effects, and color transitions
+- **Loading States**: Smooth spinner animations and skeleton screens
+
+### Responsive Design
+All visual enhancements are fully responsive and work seamlessly across desktop, tablet, and mobile devices.
+
 ## 🧪 Example Requests
 
 ### Using cURL
@@ -400,7 +416,8 @@ print(results.json())
 ### Frontend
 - **React 18**: UI library
 - **Vite**: Build tool and dev server
-- **Tailwind CSS**: Utility-first CSS framework
+- **Tailwind CSS**: Utility-first CSS framework with custom animations
+- **🆕 TSParticles**: Lightweight particle animation library for dynamic backgrounds
 - **Axios**: HTTP client
 - **React Router**: Client-side routing
 
