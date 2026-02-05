@@ -33,3 +33,7 @@ MAX_PIXELS_FOR_COLOR_SAMPLING = 10000  # Maximum pixels to sample for color anal
 # Image-Text Mismatch Detection (CLIP)
 MISMATCH_THRESHOLD = 0.25  # Similarity score threshold (0-1, lower = mismatch)
 CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"  # Pretrained CLIP model
+
+# Explainability settings
+ENABLE_ATTENTION_FALLBACK = True  # Enable graceful degradation when attention unavailable
+FALLBACK_HEATMAP_TYPE = "gradient"  # "gradient" or "original" - type of fallback visualization

@@ -44,9 +44,16 @@ export const explainClipSimilarity = async (file, description, threshold = null)
     if (threshold !== null) {
       formData.append("threshold", threshold);
     }
-    return await API.post("/explain", formData);
+    const response = await API.post("/explain", formData);
+    console.log("CLIP explanation response:", response.data);
+    return response;
   } catch (error) {
     console.error("Explain CLIP similarity error:", error);
+    // Log more details for debugging
+    if (error.response) {
+      console.error("Error response data:", error.response.data);
+      console.error("Error response status:", error.response.status);
+    }
     throw error;
   }
 };

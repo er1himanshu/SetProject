@@ -84,8 +84,34 @@ export default function UploadForm() {
       const res = await explainClipSimilarity(file, description);
       setExplanation(res.data);
       setShowExplanation(true);
+      
+      // Clear any previous error when successful
+      setExplanationError("");
     } catch (err) {
-      const errorMsg = err.response?.data?.detail || "Failed to generate explanation. Please try again.";
+      // Distinguish between different error types
+      let errorMsg = "Failed to generate explanation. Please try again.";
+      
+      if (err.response) {
+        const status = err.response.status;
+        const detail = err.response.data?.detail;
+        
+        if (status === 503) {
+          // Service unavailable
+          errorMsg = "⚠️ CLIP explainability is currently unavailable. The AI model required for this feature is not accessible. Please try again later.";
+        } else if (status === 400) {
+          // Validation error
+          errorMsg = detail || "Invalid input. Please check your image and description.";
+        } else if (status === 500) {
+          // Server error
+          errorMsg = "An error occurred on the server. Please try again or contact support if the issue persists.";
+        } else {
+          errorMsg = detail || errorMsg;
+        }
+      } else if (err.request) {
+        // Network error
+        errorMsg = "Network error. Please check your connection and try again.";
+      }
+      
       setExplanationError(errorMsg);
     } finally {
       setExplanationLoading(false);
@@ -162,18 +188,45 @@ export default function UploadForm() {
           {/* Description Area */}
           <div>
             <label htmlFor="description" className="block text-base font-bold text-gray-800 mb-4">
-              Product Description <span className="text-gray-500 font-normal">(Optional)</span>
+              Product Description <span className="text-gray-500 font-normal">(Optional, min 10 chars for CLIP)</span>
             </label>
             <textarea
               id="description"
               rows="6"
               className="input-field resize-none"
-              placeholder="E.g., Red leather handbag with gold hardware, 12 inch width..."
+              placeholder="E.g., Red leather handbag with gold hardware, 12 inch width, featuring multiple compartments and adjustable strap..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             ></textarea>
+            
+            {/* Character Counter */}
+            {description && (
+              <div className="mt-2 flex items-center justify-between">
+                <p className={`text-sm font-medium ${description.trim().length >= 10 ? 'text-success-600' : 'text-warning-600'}`}>
+                  {description.trim().length >= 10 ? (
+                    <span className="flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Ready for CLIP analysis
+                    </span>
+                  ) : (
+                    <span className="flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {10 - description.trim().length} more character{10 - description.trim().length !== 1 ? 's' : ''} needed
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500 font-medium">
+                  {description.trim().length} / 500 characters
+                </p>
+              </div>
+            )}
+            
             <p className="mt-3 text-sm text-gray-600 font-medium">
-              Provide a description to check consistency between your image and text
+              💡 Provide a detailed description to check consistency between your image and text using AI
             </p>
 
             {/* Action Buttons */}
@@ -182,6 +235,7 @@ export default function UploadForm() {
                 onClick={handleUpload}
                 disabled={loading || !file}
                 className="btn-primary w-full py-4 text-lg"
+                title={!file ? "Please select an image first" : ""}
               >
                 {loading ? (
                   <span className="flex items-center justify-center">
@@ -200,6 +254,12 @@ export default function UploadForm() {
                 onClick={handleExplainRequest}
                 disabled={explanationLoading || !file || !description || description.trim().length < 10}
                 className="btn-secondary w-full py-4 text-lg"
+                title={
+                  !file ? "Please select an image first" :
+                  !description ? "Please provide a description" :
+                  description.trim().length < 10 ? "Description must be at least 10 characters" :
+                  ""
+                }
               >
                 {explanationLoading ? (
                   <span className="flex items-center justify-center">
@@ -285,6 +345,26 @@ export default function UploadForm() {
               </button>
             </div>
 
+            {/* Fallback Mode Info Banner */}
+            {explanation.is_fallback && (
+              <div className="mb-6 p-5 bg-blue-50 border-l-4 border-blue-400 rounded-xl shadow-soft">
+                <div className="flex items-start">
+                  <svg className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <h4 className="text-lg font-bold text-blue-900 mb-2">
+                      ℹ️ Limited Visualization Available
+                    </h4>
+                    <p className="text-blue-800 text-sm leading-relaxed">
+                      Full attention heatmap is unavailable, but the similarity score below is still accurate and based on CLIP's complete analysis. 
+                      A simplified visualization is shown as an alternative.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Similarity Score Card */}
             <div className={`p-6 rounded-xl mb-6 shadow-soft ${explanation.has_mismatch ? 'bg-warning-50 border-2 border-warning-200' : 'bg-success-50 border-2 border-success-200'}`}>
               <div className="flex items-center justify-between">
@@ -322,14 +402,14 @@ export default function UploadForm() {
               </div>
             </div>
 
-            {/* Heatmap Visualization */}
+            {/* Heatmap/Image Visualization */}
             <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 shadow-soft">
               <h4 className="text-xl font-bold text-gray-800 mb-3 flex items-center">
                 <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                Attention Heatmap
+                {explanation.is_fallback ? 'Simplified Visualization' : 'Attention Heatmap'}
               </h4>
               <p className="text-gray-700 mb-4 text-sm">
                 {explanation.explanation}
@@ -337,21 +417,23 @@ export default function UploadForm() {
               <div className="bg-white rounded-lg p-4 shadow-inner">
                 <img 
                   src={`data:image/png;base64,${explanation.heatmap_base64}`} 
-                  alt="Attention Heatmap" 
+                  alt={explanation.is_fallback ? "Simplified Visualization" : "Attention Heatmap"} 
                   className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
                   style={{ maxHeight: '500px' }}
                 />
               </div>
-              <div className="mt-4 flex items-center justify-center gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-12 h-4 rounded" style={{ background: 'linear-gradient(to right, #0000ff, #00ffff)' }}></div>
-                  <span className="text-gray-700 font-medium">Low Attention</span>
+              {!explanation.is_fallback && (
+                <div className="mt-4 flex items-center justify-center gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-12 h-4 rounded" style={{ background: 'linear-gradient(to right, #0000ff, #00ffff)' }}></div>
+                    <span className="text-gray-700 font-medium">Low Attention</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-12 h-4 rounded" style={{ background: 'linear-gradient(to right, #ffff00, #ff0000)' }}></div>
+                    <span className="text-gray-700 font-medium">High Attention</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-12 h-4 rounded" style={{ background: 'linear-gradient(to right, #ffff00, #ff0000)' }}></div>
-                  <span className="text-gray-700 font-medium">High Attention</span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}

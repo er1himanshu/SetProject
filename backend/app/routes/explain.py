@@ -130,7 +130,8 @@ async def explain_clip_similarity(
             "threshold": threshold,
             "message": result["message"],
             "heatmap_base64": result["heatmap_base64"],
-            "explanation": result["explanation"]
+            "explanation": result["explanation"],
+            "is_fallback": result.get("is_fallback", False)  # Include fallback flag
         }
         
     except HTTPException:
