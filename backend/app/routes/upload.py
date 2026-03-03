@@ -15,7 +15,6 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-
 def get_db():
     """Dependency to get database session"""
     db = SessionLocal()
@@ -24,42 +23,24 @@ def get_db():
     finally:
         db.close()
 
-
 def validate_file(file: UploadFile) -> None:
-    """
-    Validate uploaded file for size and type.
-    
-    Args:
-        file: Uploaded file object
-        
-    Raises:
-        HTTPException: If validation fails
-    """
-    # Validate file extension
+    """Validate uploaded file for size and type."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
     
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}")
     
-    # Check file size (read file to get actual size)
-    file.file.seek(0, 2)  # Seek to end
+    file.file.seek(0, 2)
     file_size = file.file.tell()
-    file.file.seek(0)  # Reset to beginning
+    file.file.seek(0)
     
     if file_size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024*1024):.0f}MB"
-        )
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024*1024):.0f}MB")
     
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
-
 
 @router.post("/upload")
 async def upload_image(
@@ -67,74 +48,76 @@ async def upload_image(
     description: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    """
-    Upload and analyze a product image.
-    
-    Args:
-        file: Image file to upload (max 10MB, jpg/png/gif/webp)
-        description: Optional product description for consistency checking
-        db: Database session
-        
-    Returns:
-        dict: Upload confirmation with result_id
-        
-    Raises:
-        HTTPException: If upload or analysis fails
-    """
+    """Upload and analyze a product image."""
     file_path = None
     try:
-        # Validate file
         validate_file(file)
         
-        # Sanitize description
         if description:
-            description = description.strip()[:500]  # Limit description length
-        
-        # Save file and get both path and unique filename
+            description = description.strip()[:500]
+            
         file_path, unique_filename = save_upload(file)
         logger.info(f"File uploaded: {unique_filename}")
         
-        # Analyze image
+        # Analyze image quality
         analysis = analyze_image(file_path, description)
 
         if analysis is None:
-            # Clean up the uploaded file if analysis fails
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or corrupted image file. Please upload a valid image."
-            )
+            raise HTTPException(status_code=400, detail="Invalid or corrupted image file. Please upload a valid image.")
         
         # Run mismatch detection if description provided
         mismatch_result = None
         if description and description.strip():
             try:
                 mismatch_result = check_image_text_similarity(file_path, description)
-                # Only log if mismatch detection was successful (similarity_score is not None)
-                if mismatch_result["similarity_score"] is not None:
-                    logger.info(f"Mismatch detection: {mismatch_result['message']}")
-                else:
-                    logger.info("Mismatch detection unavailable - skipping")
             except Exception as e:
-                logger.warning(f"Mismatch detection failed, continuing without it: {str(e)}")
-                # Set mismatch_result to indicate detection is unavailable
+                logger.warning(f"Mismatch detection failed: {str(e)}")
                 mismatch_result = {
                     "has_mismatch": False,
                     "similarity_score": None,
                     "message": "Image-text mismatch detection is unavailable"
                 }
 
-        # Store result in database with unique filename (not original)
+        # --- NEW LOGIC: Sync CLIP results with overall analysis & suggestions ---
+        final_passed = analysis.get("passed", False)
+        final_reason = analysis.get("reason", "OK")
+
+        if mismatch_result and mismatch_result.get("has_mismatch"):
+            final_passed = False # Force the overall image to fail
+            
+            # Update the main reason
+            if final_reason == "OK" or not final_reason:
+                final_reason = "Failed: Image does not match the product description."
+            else:
+                final_reason = f"{final_reason} | Also failed: Image-Text Mismatch."
+
+            # Override the old consistency field for the UI table
+            analysis["description_consistency"] = "Mismatch Detected"
+
+            # Add a dynamic suggestion for the user
+            current_suggestions = analysis.get("improvement_suggestions", "")
+            mismatch_suggestion = "Ensure the description accurately matches the product's specific colors and visual details, or upload the correct image."
+            if current_suggestions:
+                analysis["improvement_suggestions"] = f"{current_suggestions}; {mismatch_suggestion}"
+            else:
+                analysis["improvement_suggestions"] = mismatch_suggestion
+                
+        elif mismatch_result and not mismatch_result.get("has_mismatch"):
+            # Explicitly confirm it is consistent if CLIP approves
+            analysis["description_consistency"] = "Consistent"
+
+        # Store result in database
         result = ImageResult(
-            filename=unique_filename,  # Use unique filename for security
+            filename=unique_filename,
             width=analysis["width"],
             height=analysis["height"],
             blur_score=analysis["blur_score"],
             brightness_score=analysis["brightness_score"],
             contrast_score=analysis["contrast_score"],
-            passed=analysis["passed"],
-            reason=analysis["reason"],
+            passed=final_passed,
+            reason=final_reason,
             description=description,
             aspect_ratio=analysis.get("aspect_ratio"),
             sharpness_score=analysis.get("sharpness_score"),
@@ -150,8 +133,6 @@ async def upload_image(
         db.commit()
         db.refresh(result)
         
-        logger.info(f"Analysis complete for {unique_filename}, result_id: {result.id}")
-
         return {
             "message": "Image uploaded and analyzed successfully",
             "result_id": result.id,
@@ -159,46 +140,16 @@ async def upload_image(
         }
         
     except HTTPException:
-        # Re-raise HTTP exceptions as-is
         raise
     except SQLAlchemyError as e:
-        # Database-specific errors
         if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception as cleanup_error:
-                logger.error(f"Error cleaning up file {file_path}: {str(cleanup_error)}")
-        
-        logger.error(f"Database error for file {file.filename}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Database error occurred. Please try again later."
-        )
-    except PermissionError as e:
-        # File system permission errors
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
-        
-        logger.error(f"Permission error for file {file.filename}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="File access error. Please try again."
-        )
+            try: os.remove(file_path)
+            except: pass
+        logger.error(f"Database error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Database error occurred.")
     except Exception as e:
-        # Clean up file on any other error
         if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception as cleanup_error:
-                logger.error(f"Error cleaning up file {file_path}: {str(cleanup_error)}")
-        
-        # Log the error internally with full details
-        logger.error(f"Upload error for file {file.filename}: {str(e)}", exc_info=True)
-        
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred during upload. Please try again."
-        )
+            try: os.remove(file_path)
+            except: pass
+        logger.error(f"Upload error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred during upload.")

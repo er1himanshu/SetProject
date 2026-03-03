@@ -220,15 +220,23 @@ def detect_mismatch(image_path: str, description: str, threshold: Optional[float
             padding=True
         )
         
-        # Get model outputs
+        # Get model outputs and calculate raw cosine similarity
         with torch.no_grad():
             outputs = model(**inputs)
             
-        # Calculate similarity score
-        # CLIP returns logits - normalize to 0-1 range for interpretability
-        logits_per_image = outputs.logits_per_image
-        # Normalize the single logit value to 0-1 range using sigmoid
-        similarity_score = torch.sigmoid(logits_per_image / 100.0).item()
+            # Extract the raw embeddings
+            image_embeds = outputs.image_embeds
+            text_embeds = outputs.text_embeds
+            
+            # Apply L2 normalization to the vectors
+            image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+            text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+            
+            # Calculate cosine similarity (dot product of normalized vectors)
+            cosine_sim = torch.matmul(image_embeds, text_embeds.t()).item()
+            
+            # Ensure the score is bounded for the UI
+            similarity_score = max(0.0, float(cosine_sim))
         
         # Determine if there's a mismatch using the provided threshold
         is_mismatch = similarity_score < threshold
